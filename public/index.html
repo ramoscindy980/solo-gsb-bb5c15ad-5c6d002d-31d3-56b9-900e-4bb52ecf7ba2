@@ -94,6 +94,19 @@
       <div id="stockResult" class="stock-result" hidden></div>
     </section>
 
+    <section class="batch-proof">
+      <h2 class="batch-proof-title">批量校样 <span class="compare-sub">粘贴 CSV 逐条试排，不改变当前成品</span></h2>
+      <label class="field">
+        <span class="field-label">CSV 内容（首行表头 title,zh,en；最多 20 条；title、zh 必填，en 可空）</span>
+        <textarea id="batchCsv" rows="6" placeholder="title,zh,en&#10;白陶刻纹尊,&quot;新石器时代·仰韶文化，约公元前 5000–前 3000 年。&quot;,Painted pottery zun&#10;……字段含逗号、换行或双引号时用英文双引号整体包裹，字段内的双引号写两个。"></textarea>
+        <span class="field-hint multiline" id="batchHint">未粘贴 CSV</span>
+      </label>
+      <div class="actions">
+        <button id="batchRunBtn" type="button">开始校样（沿用当前尺寸与设置，不改变当前成品）</button>
+      </div>
+      <div id="batchResult" class="batch-result" hidden></div>
+    </section>
+
     <section id="compare" class="compare" hidden>
       <h2 class="compare-title">修订对照 <span class="compare-sub">差异标记仅用于对照，不进入打印</span></h2>
       <div id="diffView" class="diff-view"></div>
@@ -186,6 +199,12 @@
           （同面积按录入顺序）列在前面并给出可用字号，其余规格注明失败原因；
           没有可用规格时明确提示且不改当前尺寸。点击某行的「采用」才把该规格回填
           宽/高并刷新预览、单张与拼版打印。</li>
+        <li><strong>批量校样</strong>：粘贴含表头 title,zh,en 的 CSV（最多 20 条；
+          字段可用英文双引号包裹以包含逗号、换行，字段内双引号写两个），逐条校验列数
+          与必填的标题、中文正文（错误定位到记录号）；每条仅替换标题、中文正文与英文译文，
+          沿用当前尺寸、段落对齐、专名保护、二维码与术语表设置逐条试排，
+          列出可用字号或失败原因；校样不改变当前成品，点击通过记录的「载入编辑」
+          才回填三栏并清空修订稿。</li>
       </ul>
     </details>
   </aside>
@@ -219,6 +238,7 @@
 <script src="/js/layout.js"></script>
 <script src="/js/terms.js"></script>
 <script src="/js/qrcode.js"></script>
+<script src="/js/batch.js"></script>
 <script src="/js/app.js"></script>
 </body>
 </html>
