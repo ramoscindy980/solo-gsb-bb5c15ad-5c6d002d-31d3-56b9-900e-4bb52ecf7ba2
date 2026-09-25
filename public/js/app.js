@@ -48,6 +48,10 @@
     stockHint: document.getElementById('stockHint'),
     stockPickBtn: document.getElementById('stockPickBtn'),
     stockResult: document.getElementById('stockResult'),
+    batchCsv: document.getElementById('batchCsv'),
+    batchHint: document.getElementById('batchHint'),
+    batchBtn: document.getElementById('batchBtn'),
+    batchResult: document.getElementById('batchResult'),
     printBtn: document.getElementById('printBtn'),
     status: document.getElementById('status'),
     stage: document.getElementById('stage'),
@@ -1259,6 +1263,211 @@
     render();
   }
 
+  // ---------- 批量校样 ----------
+  // 粘贴含表头 title,zh,en 的 CSV（解析与逐条校验见 csv.js），点击「开始校样」后
+  // 每条仅替换标题、中文正文与英文译文，沿用当前尺寸、段落对齐开关、专名保护表、
+  // 二维码预留与术语对照表设置，调用与成品相同的排版（computeLayout）与打印门禁
+  // （含术语核对），逐条列出可用字号或失败原因；校样过程不改动任何输入与当前成品，
+  // 仅点击通过项的「载入编辑」才回填三栏并清空修订稿。
+
+  // 校样输入框提示：解析概况（记录数、校验失败条数）或整体错误；仅更新提示，不排版
+  function updateBatchHint() {
+    var raw = el.batchCsv.value;
+    if (!raw.trim()) {
+      el.batchHint.textContent = '未粘贴 CSV';
+      el.batchHint.classList.remove('err');
+      return;
+    }
+    var parsed = window.LabelCsv.parseBatch(raw);
+    if (parsed.fatal) {
+      el.batchHint.textContent = parsed.fatal;
+      el.batchHint.classList.add('err');
+      return;
+    }
+    var bad = 0;
+    parsed.records.forEach(function (r) { if (!r.ok) bad++; });
+    el.batchHint.textContent = '已解析 ' + parsed.total + ' 条记录' +
+      (bad ? '，其中 ' + bad + ' 条未通过列数/必填校验（详见校样结果）' : '') +
+      '；点击「开始校样」按当前尺寸与设置逐条试排';
+    el.batchHint.classList.remove('err');
+  }
+
+  // 整体无法校样（CSV 整体错误或当前设置有阻塞性错误）：结果区给出原因，不逐条排版
+  function showBatchFatal(message) {
+    el.batchResult.innerHTML = '';
+    var div = document.createElement('div');
+    div.className = 'batch-result-none';
+    div.textContent = message;
+    el.batchResult.appendChild(div);
+    el.batchResult.hidden = false;
+  }
+
+  // 点击「开始校样」：以当前尺寸与设置对每条记录逐条试排
+  function runBatchProof() {
+    var parsed = window.LabelCsv.parseBatch(el.batchCsv.value);
+    if (parsed.fatal) {
+      el.batchHint.textContent = parsed.fatal;
+      el.batchHint.classList.add('err');
+      showBatchFatal(parsed.fatal);
+      return;
+    }
+
+    // 校样沿用当前设置；设置存在阻塞性错误（链接/保护表/术语对照表/尺寸）时整体不排版
+    var c = collectInputs();
+    if (c.qrError) {
+      showBatchFatal('展品介绍链接有误，无法校样：\n' + c.qrError);
+      return;
+    }
+    if (c.protect.error) {
+      showBatchFatal('专名保护表有误，无法校样：\n' + c.protect.error);
+      return;
+    }
+    var glossary = window.LabelTerms.parseGlossary(el.glossary.value);
+    if (glossary.errors.length) {
+      showBatchFatal('双语术语对照表有误，无法校样：\n' + glossary.errors.join('\n'));
+      return;
+    }
+    if (!(c.input.widthMm >= 30 && c.input.widthMm <= 999 &&
+          c.input.heightMm >= 20 && c.input.heightMm <= 999)) {
+      showBatchFatal('当前标签尺寸无效（宽 30–999mm，高 20–999mm），无法校样，请先修正。');
+      return;
+    }
+
+    var paraAlignOn = el.paraAlign.checked;
+    var rows = parsed.records.map(function (rec) {
+      if (!rec.ok) return { rec: rec, pass: false, note: rec.error };
+      // 每条仅替换三栏内容，其余沿用当前设置；en 留空的记录保持单栏
+      var trial = {
+        title: rec.title,
+        body: rec.zh,
+        bodyEn: rec.en,
+        widthMm: c.input.widthMm,
+        heightMm: c.input.heightMm,
+        protectedWords: c.input.protectedWords,
+        reserveBottomMm: c.input.reserveBottomMm
+      };
+      trial.titleTrim = rec.title.trim();
+      trial.bodyTrim = rec.zh.trim();
+      trial.enTrim = rec.en.trim();
+      trial.dual = trial.enTrim.length > 0;
+      trial.paired = trial.dual && paraAlignOn;
+      var res = computeLayout(trial);
+      if (!res.ok) {
+        return { rec: rec, pass: false, note: stockFailNote(res, !!c.qr) };
+      }
+      // 打印门禁：段落对齐且录入术语表时，对该条逐段核对术语次数
+      if (trial.paired && glossary.entries.length) {
+        var chk = window.LabelTerms.checkParagraphs(
+          trial.bodyTrim, trial.enTrim, glossary.entries);
+        if (chk.zhParas === chk.enParas && chk.mismatches.length) {
+          return {
+            rec: rec, pass: false,
+            note: '✗ 术语核对未通过：' + chk.mismatches.length +
+              ' 处术语次数不符（载入编辑后可在「双语术语核对」区查看明细）'
+          };
+        }
+      }
+      return { rec: rec, pass: true, note: '✓ 可用 ' + res.bodyPx + 'px' };
+    });
+
+    renderBatchResult(c, paraAlignOn, glossary.entries.length, rows);
+  }
+
+  // 校样结果：依据说明 + 通过/未通过汇总 + 逐条表格（可用字号或失败原因）；
+  // 仅通过项提供「载入编辑」
+  function renderBatchResult(c, paraAlignOn, termCount, rows) {
+    el.batchResult.innerHTML = '';
+    el.batchResult.hidden = false;
+
+    var pw = c.input.protectedWords || [];
+    var head = document.createElement('div');
+    head.className = 'batch-result-head';
+    head.textContent = '校样依据：尺寸 ' + c.input.widthMm + '×' + c.input.heightMm + 'mm' +
+      ' · 段落对齐' + (paraAlignOn ? '开' : '关') +
+      (pw.length ? ' · 保护词 ' + pw.length + ' 个' : '') +
+      (c.qr ? ' · 预留 ' + QR_BAND_MM + 'mm 二维码区' : ' · 无二维码') +
+      (termCount ? ' · 术语表 ' + termCount + ' 对' : '') +
+      '；每条仅替换标题、中文正文与英文译文，校样不改变当前成品。';
+    el.batchResult.appendChild(head);
+
+    var passCount = 0;
+    rows.forEach(function (r) { if (r.pass) passCount++; });
+    var summary = document.createElement('div');
+    summary.className = 'batch-result-head';
+    summary.textContent = '共 ' + rows.length + ' 条：' + passCount + ' 条通过，' +
+      (rows.length - passCount) + ' 条未通过（原因见下表）。';
+    el.batchResult.appendChild(summary);
+
+    var table = document.createElement('table');
+    table.className = 'batch-table';
+    var thead = document.createElement('thead');
+    var headRow = document.createElement('tr');
+    ['记录号', '标题', '校样结果', '操作'].forEach(function (txt) {
+      var th = document.createElement('th');
+      th.textContent = txt;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    var tbody = document.createElement('tbody');
+
+    rows.forEach(function (row) {
+      var tr = document.createElement('tr');
+      var noTd = document.createElement('td');
+      noTd.textContent = '第 ' + row.rec.no + ' 条';
+      var titleTd = document.createElement('td');
+      titleTd.textContent = row.rec.title.trim() || '—';
+      var resTd = document.createElement('td');
+      resTd.className = row.pass ? 'good' : 'bad';
+      resTd.textContent = row.note;
+      var actTd = document.createElement('td');
+      if (row.pass) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'batch-load';
+        btn.textContent = '载入编辑';
+        btn.addEventListener('click', function () { loadBatchRecord(row.rec); });
+        actTd.appendChild(btn);
+      } else {
+        actTd.textContent = '—';
+      }
+      tr.appendChild(noTd);
+      tr.appendChild(titleTd);
+      tr.appendChild(resTd);
+      tr.appendChild(actTd);
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    el.batchResult.appendChild(table);
+
+    if (passCount) {
+      var tip = document.createElement('div');
+      tip.className = 'batch-result-head';
+      tip.textContent = '点击通过项的「载入编辑」才把该条标题、中文正文与英文译文回填到上方三栏' +
+        '（同时清空修订稿），随后由原有预览与打印流程处理；修改设置后请重新点击「开始校样」。';
+      el.batchResult.appendChild(tip);
+    }
+  }
+
+  // 载入编辑：仅校样通过项可用。回填三栏并清空修订稿，
+  // 随后由原有预览与打印流程处理（render 内重排并刷新单张/拼版打印）
+  function loadBatchRecord(rec) {
+    el.title.value = rec.title;
+    el.body.value = rec.zh;
+    el.bodyEn.value = rec.en;
+    el.bodyRev.value = '';
+    updateRevCount(false);
+    render();
+    var old = el.batchResult.querySelector('.batch-loaded');
+    if (old) old.parentNode.removeChild(old);
+    var note = document.createElement('div');
+    note.className = 'batch-loaded';
+    note.textContent = '第 ' + rec.no + ' 条「' + (rec.title.trim() || '未命名') +
+      '」已载入编辑区：三栏已回填、修订稿已清空，右侧预览与打印已按现有流程更新。';
+    el.batchResult.insertBefore(note, el.batchResult.firstChild);
+  }
+
   function showError(message) {
     el.labelError.textContent = message;
     el.labelError.hidden = false;
@@ -1544,8 +1753,19 @@
   // 选型：以当前成品版本与设置，对各库存规格求最大可用字号并给出推荐
   el.stockPickBtn.addEventListener('click', runStockPick);
 
+  // 批量校样 CSV：输入时仅更新提示并清空上次校样结果，不改变当前成品
+  el.batchCsv.addEventListener('input', function () {
+    el.batchResult.hidden = true;
+    el.batchResult.innerHTML = '';
+    updateBatchHint();
+  });
+  el.batchCsv.addEventListener('change', updateBatchHint);
+  // 开始校样：以当前尺寸与设置对每条记录逐条试排
+  el.batchBtn.addEventListener('click', runBatchProof);
+
   updateRevCount(false);
   updateStockHint();
+  updateBatchHint();
 
   el.printBtn.addEventListener('click', function () {
     printMode = 'single';

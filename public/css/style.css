@@ -213,9 +213,10 @@ button:disabled { background: #aaa5; cursor: not-allowed; }
   margin: 6px 0 8px;
 }
 
-/* 两版排版对比表与库存规格选型结果表 */
+/* 两版排版对比表、库存规格选型结果表与批量校样结果表 */
 .fit-table,
-.stock-table {
+.stock-table,
+.batch-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
@@ -224,21 +225,26 @@ button:disabled { background: #aaa5; cursor: not-allowed; }
 .fit-table th,
 .fit-table td,
 .stock-table th,
-.stock-table td {
+.stock-table td,
+.batch-table th,
+.batch-table td {
   border: 1px solid var(--line);
   padding: 4px 6px;
   text-align: left;
   vertical-align: top;
 }
 .fit-table th,
-.stock-table th {
+.stock-table th,
+.batch-table th {
   background: #f0f1f4;
   font-weight: 600;
 }
 .fit-table td.good,
-.stock-table td.good { color: #2f6f44; }
+.stock-table td.good,
+.batch-table td.good { color: #2f6f44; }
 .fit-table td.bad,
-.stock-table td.bad { color: var(--danger); }
+.stock-table td.bad,
+.batch-table td.bad { color: var(--danger); }
 
 .fit-delta {
   font-size: 12px;
@@ -307,6 +313,47 @@ button:disabled { background: #aaa5; cursor: not-allowed; }
   font-size: 12px;
   letter-spacing: 1px;
 }
+
+/* ========== 批量校样 ========== */
+.batch-proof {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-bottom: 14px;
+}
+.batch-proof-title {
+  font-size: 13px;
+  margin: 0 0 8px;
+  letter-spacing: 1px;
+}
+.batch-result {
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.batch-result-head {
+  color: var(--muted);
+  margin: 6px 0;
+  white-space: pre-line;
+}
+.batch-result-none {
+  color: var(--danger);
+  font-weight: 600;
+  margin-bottom: 6px;
+  white-space: pre-line;
+}
+.batch-load {
+  width: auto;
+  padding: 3px 12px;
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+.batch-loaded {
+  color: #2f6f44;
+  font-weight: 600;
+  margin: 6px 0;
+  white-space: pre-line;
+}
+.batch-table td { word-break: break-all; }
 
 /* ========== 右侧预览舞台 ========== */
 .stage-wrap { overflow: auto; }
